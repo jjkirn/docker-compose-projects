@@ -1,0 +1,65 @@
+version: '3.7'
+services:
+  elasticsearch:
+    image: elasticsearch:7.9.1
+    container_name: es
+    environment:
+      discovery.type: single-node
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    healthcheck:
+        test: ["CMD-SHELL", "curl --silent --fail localhost:9200/_cluster/health || exit 1"]
+        interval: 10s
+        timeout: 10s
+        retries: 3
+    networks:
+      - elastic
+  logstash:
+    image: logstash:7.9.1
+    container_name: logstash
+    volumes:
+      - ./logstash/conf.d/:/usr/share/logstash/pipeline/:ro
+    ports:
+      - "5044:5044"
+    depends_on:
+      - elasticsearch
+    networks:
+      - elastic
+    command: logstash -f /usr/share/logstash/pipeline/logstash.conf
+  kibana:
+    image: kibana:7.9.1
+    container_name: kibana
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    environment:
+      ELASTICSEARCH_URL: http://es:9200
+      ELASTICSEARCH_HOSTS: http://es:9200
+    networks:
+      - elastic
+  nginx:
+    image: nginx
+    container_name: nginx
+    environment:
+      - NGINX_HOST=es2.jkirn.com
+      - NGINX_PORT=80
+    volumes:
+      - ./frontend/nginx/htpasswd:/etc/nginx/htpasswd.users
+      - ./frontend/nginx/nginx.conf:/etc/nginx/nginx.conf
+    ports:
+      - 80:80
+    depends_on:
+      - logstash
+    networks:
+    - elastic
+networks:
+  elastic:
+    driver: bridge
+volumes:
+  es-data:
+    driver: local
